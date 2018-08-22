@@ -1,22 +1,18 @@
-#include <USBHID.h>
-#include <libmaple/usb.h>
+#include <USBComposite.h>
 
 #define TXSIZE 256
 #define RXSIZE 300
 
-HIDRaw<TXSIZE,RXSIZE> raw;
+USBHID HID;
+HIDRaw<TXSIZE,RXSIZE> raw(HID);
 uint8 buf[RXSIZE];
-
-extern "C" {
-  extern uint32 info;
-};
 
 const uint8_t reportDescription[] = {
    HID_RAW_REPORT_DESCRIPTOR(TXSIZE,RXSIZE)
 };
 
 void setup(){
-  USBHID.begin(reportDescription, sizeof(reportDescription));  
+  HID.begin(reportDescription, sizeof(reportDescription));  
   raw.begin();
 }
 

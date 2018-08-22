@@ -1,12 +1,16 @@
-#include <USBHID.h>
+#include <USBComposite.h>
+
+USBHID HID;
+HIDKeyboard Keyboard(HID);
 
 void setup() {
-  USBHID.begin(HID_KEYBOARD);
-  Keyboard.begin(); // needed in case you want LED support
+  HID.begin(HID_KEYBOARD);
+  Keyboard.begin(); // useful to detect host capslock state and LEDs
   delay(1000);
 }
 
 void loop() {
-  Keyboard.println("hello");
-  delay(5000);
+  Keyboard.println("Hello world");
+  delay(10000);
 }
+

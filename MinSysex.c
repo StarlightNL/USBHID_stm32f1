@@ -129,10 +129,12 @@ volatile int sysexFinger=0;
 #define EXC_RETURN 0xFFFFFFF9
 #define DEFAULT_CPSR 0x61000000
 #define RESET_DELAY 100000
+#if 0
 static void wait_reset(void) {
     delay_us(RESET_DELAY);
     nvic_sys_reset();
 }
+#endif
 
 /* -----------------------------------------------------------------------------dealWithItQuickly()
  * Note: at this point we have established that the sysex belongs to us.
@@ -152,6 +154,7 @@ void dealWithItQuickly(){
             }
         case USYSEX_REAL_TIME:
             break;
+#if 0			
         case LEAFLABS_MMA_VENDOR_1:
             if (sysexBuffer[5]==LGL_RESET_CMD) {
                 uintptr_t target = (uintptr_t)wait_reset | 0x1;
@@ -180,7 +183,7 @@ void dealWithItQuickly(){
                 ASSERT_FAULT(0);
 
             }
-    
+#endif    
         default:
             break;
     }
@@ -261,7 +264,7 @@ void LglSysexHandler(uint32 *midiBufferRx, uint32 *rx_offset, uint32 *n_unread_p
                 sysexBuffer[sysexFinger++]=packet->midi1;
                 sysexBuffer[sysexFinger++]=packet->midi2;
                 if (sysexState==YUP_ITS_MY_SYSEX) {
-                    if(cPacket>=(*n_unread_packets)){
+                    if(cPacket>=(int32)(*n_unread_packets)){
                         *n_unread_packets = soPackets;
                         *rx_offset = soPackets;
                     } else {
@@ -269,7 +272,7 @@ void LglSysexHandler(uint32 *midiBufferRx, uint32 *rx_offset, uint32 *n_unread_p
                         uint32 *s;
                         uint32 *d = midiBufferRx + soPackets;
                         for (s = midiBufferRx+c;
-                             ((*n_unread_packets) && (s <= midiBufferRx+(USB_MIDI_RX_EPSIZE/4)));
+                             ((*n_unread_packets) && (s <= midiBufferRx+(usb_midi_txEPSize/4)));
                              d++,s++
                             ) {
                                 (*d)=(*s);

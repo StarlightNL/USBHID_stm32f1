@@ -19,6 +19,9 @@ The MIT License
 
 Copyright (c) 2011 LeafLabs LLC.
 Parts of composite HID+Serial code taken from https://github.com/libarra111/Arduino_STM32
+USB Mass storage code based on Joe Ferner's code: https://github.com/joeferner/maple-usbMassStorage
+MIDI code Copyright (c) 2010 Perry Hung, (c) 2013 Magnus Lundin, (c) 2013 Donald Delmar Davis, Suspect Devices,
+(c) 2003-2008 Tymm Twillman <tymm@booyaka.com>.
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
@@ -39,3 +42,4 @@ BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
 ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+	

@@ -1,13 +1,15 @@
-#include <USBHID.h>
+#include <USBComposite.h>
+
+USBHID HID;
 
 const uint8_t reportDescription[] = {
    HID_CONSUMER_REPORT_DESCRIPTOR()
 };
 
-HIDConsumer Consumer;
+HIDConsumer Consumer(HID);
 
 void setup(){
-  USBHID.begin(reportDescription, sizeof(reportDescription));
+  HID.begin(reportDescription, sizeof(reportDescription));
 }
 
 void loop() {

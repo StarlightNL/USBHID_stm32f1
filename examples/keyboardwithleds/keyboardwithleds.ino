@@ -1,8 +1,11 @@
-#include <USBHID.h>
+#include <USBComposite.h>
 
+USBHID HID;
+HIDKeyboard Keyboard(HID);
+USBCompositeSerial CompositeSerial;
 
 void setup() {
-  USBHID.begin(HID_KEYBOARD);
+  HID.begin(CompositeSerial, HID_KEYBOARD);
   Keyboard.begin(); // needed for LED support
   delay(1000);
 }

@@ -29,17 +29,19 @@
  * @brief Wirish USB MIDI port (MidiUSB).
  */
 
-#ifndef _WIRISH_USB_MIDI_H_
-#define _WIRISH_USB_MIDI_H_
+#ifndef _USBMIDI_H_
+#define _USBMIDI_H_
 
-#include <Print.h>
+//#include <Print.h>
 #include <boards.h>
+#include <USBComposite.h>
+#include "usb_generic.h"
 
 /*
  * This is the Midi class.  If you are just sending Midi data, you only need to make an
- *  instance of the class, passing it your serial port -- in most cases it looks like
+ *  instance of the class, passing it your USB port -- in most cases it looks like
  *
- *   USBMidi midi(channel);
+ *   USBMidi midi;
  *
  *  then you don't need to do anything else; you can start using it to send Midi messages,
  *  e.g.
@@ -90,57 +92,44 @@
  *      midi.poll();
  *    }
  *
- *   This causes the Midi class to read data from the serial port and process it.
+ *   This causes the Midi class to read data from the USB port and process it.
  */
 
-class USBMidi {
+class USBMIDI {
 private:
-    // The serial port used by this Midi instance (it takes complete control over the port)
+    bool enabled = false;
     
     /* Private Receive Parameters */
     
     // The channel this Midi instance receives data for (0 means all channels)
     int channelIn_;
     
-    // These are for keeping track of partial Midi messages as bytes come in
-    int recvMode_;
-    int recvByteCount_;
-    int recvEvent_;
-    int recvArg0_;
-    int recvBytesNeeded_;
-    int lastStatusSent_;
-    
-    /* Private Send Parameters */
-    
-    // This controls whether every Midi message gets a command byte sent with it
-    //  (Midi can just send a single command byte and then stream events without
-    //  sending the command each time)
-    bool sendFullCommands_;
-    
     /* Internal functions */
     
-    // Called whenever data is read from the serial port
+    // Called whenever data is read from the USB port
     void dispatchPacket(uint32 packet);
     
-    // This doesn't work -- by making it private, we ensure nobody ever calls it
-    //Midi();
-    
+    uint32 txPacketSize = 64;
+    uint32 rxPacketSize = 64;
+
 public:
-    // Set this parameter to anything other than 0 to cause every MIDI update to
-    //  include a copy of the current event (e.g. for every note off to include
-    //  the NOTE OFF event) -- by default, if an event is the same type of event as
-    //  the last one sent, the event byte isn't sent; just the new note/velocity
-    static const unsigned int PARAM_SEND_FULL_COMMANDS = 0x1000;
+	static bool init(USBMIDI* me);
+	// This registers this USB composite device component with the USBComposite class instance.
+	bool registerComponent();
+	void setChannel(unsigned channel=0);
+	unsigned getChannel() {
+		return channelIn_;
+	}
     
-    // Use this parameter to update the channel the MIDI code is looking for messages
-    //  to.  0 means "all channels".
-    static const unsigned int PARAM_CHANNEL_IN         = 0x1001;
-    
-    
-    // Constructor -- generally just use e.g. "Midi midi(Serial);"
-    USBMidi();
-    
-    // Call to start the serial port, at given baud.  For many applications
+    void setRXPacketSize(uint32 size=64) {
+        rxPacketSize = size;
+    }
+
+    void setTXPacketSize(uint32 size=64) {
+        txPacketSize = size;
+    }
+
+    // Call to start the USB port, at given baud.  For many applications
     //  the default parameters are just fine (which will cause messages for all
     //  MIDI channels to be delivered)
     void begin(unsigned int channel = 0);
@@ -159,18 +148,9 @@ public:
     uint8 isConnected();
     uint8 pending();
 
-    
-    // Changes the updateable parameters (params are Midi::PARAM_SEND_FULL_COMMANDS or
-    //  Midi::PARAM_CHANNEL_IN -- see above for what they mean)
-    void setParam(unsigned int param, unsigned int val);
-    
-    // Get current values for the user updateable parameters (params, etc same as above)
-    unsigned int getParam(unsigned int param);
-    
-    
     // poll() should be called every time through loop() IF dealing with incoming MIDI
     //  (if you're only SENDING MIDI events from the Arduino, you don't need to call
-    //  poll); it causes data to be read from the serial port and processed.
+    //  poll); it causes data to be read from the USB port and processed.
     void poll();
     
     // Call these to send MIDI messages of the given types
@@ -208,9 +188,9 @@ public:
     virtual void handleStop(void);
     virtual void handleActiveSense(void);
     virtual void handleReset(void);
+    
 };
 
-extern USBMidi MidiUSB;
-
+extern const uint32 midiNoteFrequency_10ths[128];
 
 #endif

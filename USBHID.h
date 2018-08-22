@@ -1,29 +1,26 @@
-/*
-  Copyright (c) 2012 Arduino.  All right reserved.
-  This library is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
-  This library is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU Lesser General Public License for more details.
-  You should have received a copy of the GNU Lesser General Public
-  License along with this library; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+/* Copyright (c) 2011, Peter Barrett  
+**  
+** Permission to use, copy, modify, and/or distribute this software for  
+** any purpose with or without fee is hereby granted, provided that the  
+** above copyright notice and this permission notice appear in all copies.  
+** 
+** THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL  
+** WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED  
+** WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR  
+** BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES  
+** OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,  
+** WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,  
+** ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS  
+** SOFTWARE.  
 */
 
-/**
- * @brief USB HID port (HID USB).
- */
-
-#ifndef _HID_DEVICE_H_
-#define _HID_DEVICE_H_
+#ifndef _USBHID_H_
+#define _USBHID_H_
 
 #include <Print.h>
 #include <boards.h>
 #include "Stream.h"
-#include "usb_composite.h"
+#include "usb_hid.h"
 
 #define USB_HID_MAX_PRODUCT_LENGTH 32
 #define USB_HID_MAX_MANUFACTURER_LENGTH 32
@@ -33,6 +30,8 @@
 #define HID_KEYBOARD_REPORT_ID 2
 #define HID_CONSUMER_REPORT_ID 3
 #define HID_JOYSTICK_REPORT_ID 20
+
+#define HID_KEYBOARD_ROLLOVER 6
 
 #define MACRO_GET_ARGUMENT_2(x, y, ...) y
 #define MACRO_GET_ARGUMENT_1_WITH_DEFAULT(default, ...) MACRO_GET_ARGUMENT_2(placeholder, ## __VA_ARGS__, default)
@@ -156,7 +155,7 @@
     0x75, 0x08,						/*    REPORT_SIZE (8) */ \
     0x81, 0x03,						/*    INPUT (Cnst,Var,Abs) */ \
 \
-	0x95, 0x06,						/*    REPORT_COUNT (6) */ \
+	0x95, HID_KEYBOARD_ROLLOVER,						/*    REPORT_COUNT (6) */ \
     0x75, 0x08,						/*    REPORT_SIZE (8) */ \
     0x15, 0x00,						/*    LOGICAL_MINIMUM (0) */ \
     0x25, 0x65,						/*    LOGICAL_MAXIMUM (101) */ \
@@ -289,27 +288,24 @@ typedef struct {
     uint16_t length;    
 } HIDReportDescriptor;
 
-// You could use this for a serial number, but you'll be revealing the device ID to the host,
-// and hence burning it for cryptographic purposes.
-const char* getDeviceIDString();
-
-class USBHIDDevice{
+class USBHID {
 private:
-	bool enabled = false;
-    uint8_t serialSupport = true;
-    uint8_t iManufacturer[USB_DESCRIPTOR_STRING_LEN(USB_HID_MAX_MANUFACTURER_LENGTH)];
-    uint8_t iProduct[USB_DESCRIPTOR_STRING_LEN(USB_HID_MAX_PRODUCT_LENGTH)];
-    uint8_t iSerialNumber[USB_DESCRIPTOR_STRING_LEN(USB_HID_MAX_SERIAL_NUMBER_LENGTH)];    
+	bool enabledHID = false;
+    uint32 txPacketSize = 64;
 public:
-	USBHIDDevice(void);
+	static bool init(USBHID* me);
+	bool registerComponent();
+	void setReportDescriptor(const uint8_t* report_descriptor, uint16_t report_descriptor_length);
+	void setReportDescriptor(const HIDReportDescriptor* reportDescriptor);
     // All the strings are zero-terminated ASCII strings. Use NULL for defaults.
-    void begin(const uint8_t* report_descriptor, uint16_t length, uint16_t idVendor=0, uint16_t idProduct=0,
-        const char* manufacturer=NULL, const char* product=NULL, const char* serialNumber="00000000000000000001");
-    void begin(const HIDReportDescriptor* reportDescriptor, uint16_t idVendor=0, uint16_t idProduct=0,
-        const char* manufacturer=NULL, const char* product=NULL, const char* serialNumber="00000000000000000001");
-    void setSerial(uint8 serialSupport=true);
+    void begin(const uint8_t* report_descriptor, uint16_t length);
+    void begin(const HIDReportDescriptor* reportDescriptor);
+    void begin(USBCompositeSerial serial, const uint8_t* report_descriptor, uint16_t length);
+    void begin(USBCompositeSerial serial, const HIDReportDescriptor* reportDescriptor);
     void setBuffers(uint8_t buffers, volatile HIDBuffer_t* fb=NULL, int count=0); // type = HID_REPORT_TYPE_FEATURE or HID_REPORT_TYPE_OUTPUT
     bool addBuffer(uint8_t type, volatile HIDBuffer_t* buffer);
+	void clearBuffers(uint8_t type);
+	void clearBuffers();
     inline bool addFeatureBuffer(volatile HIDBuffer_t* buffer) {
         return addBuffer(HID_REPORT_TYPE_FEATURE, buffer);
     }
@@ -323,25 +319,28 @@ public:
         setBuffers(HID_REPORT_TYPE_OUTPUT, fb, count);
     }     
     void end(void);
+    void setTXPacketSize(uint32 size=64) {
+        txPacketSize = size;
+    }
 };
-
 
 class HIDReporter {
     private:
         uint8_t* buffer;
         unsigned bufferSize;
         uint8_t reportID;
-        
+
     protected:
-        void sendReport(); 
+        USBHID& HID;
         
     public:
+        void sendReport(); 
         // if you use this init function, the buffer starts with a reportID, even if the reportID is zero,
         // and bufferSize includes the reportID; if reportID is zero, sendReport() will skip the initial
         // reportID byte
-        HIDReporter(uint8_t* _buffer, unsigned _size, uint8_t _reportID);
-        // if you use this init function, the buffer has no reportID function in it
-        HIDReporter(uint8_t* _buffer, unsigned _size);
+        HIDReporter(USBHID& _HID, uint8_t* _buffer, unsigned _size, uint8_t _reportID);
+        // if you use this init function, the buffer has no reportID byte in it
+        HIDReporter(USBHID& _HID, uint8_t* _buffer, unsigned _size);
         uint16_t getFeature(uint8_t* out=NULL, uint8_t poll=1);
         uint16_t getOutput(uint8_t* out=NULL, uint8_t poll=1);
         uint16_t getData(uint8_t type, uint8_t* out, uint8_t poll=1); // type = HID_REPORT_TYPE_FEATURE or HID_REPORT_TYPE_OUTPUT
@@ -363,7 +362,7 @@ protected:
 	void buttons(uint8_t b);
     uint8_t reportBuffer[5];
 public:
-	HIDMouse(uint8_t reportID=HID_MOUSE_REPORT_ID) : HIDReporter(reportBuffer, sizeof(reportBuffer), reportID), _buttons(0) {}
+	HIDMouse(USBHID& HID, uint8_t reportID=HID_MOUSE_REPORT_ID) : HIDReporter(HID, reportBuffer, sizeof(reportBuffer), reportID), _buttons(0) {}
 	void begin(void);
 	void end(void);
 	void click(uint8_t b = MOUSE_LEFT);
@@ -386,7 +385,7 @@ protected:
 	void buttons(uint8_t b);
     AbsMouseReport_t report;
 public:
-	HIDAbsMouse(uint8_t reportID=HID_MOUSE_REPORT_ID) : HIDReporter((uint8_t*)&report, sizeof(report), reportID) {
+	HIDAbsMouse(USBHID& HID, uint8_t reportID=HID_MOUSE_REPORT_ID) : HIDReporter(HID, (uint8_t*)&report, sizeof(report), reportID) {
         report.buttons = 0;
         report.x = 0;
         report.y = 0;
@@ -419,151 +418,13 @@ public:
            PLAY_OR_PAUSE = 0xCD
            // see pages 75ff of http://www.usb.org/developers/hidpage/Hut1_12v2.pdf
            };
-	HIDConsumer(uint8_t reportID=HID_CONSUMER_REPORT_ID) : HIDReporter((uint8_t*)&report, sizeof(report), reportID) {
+	HIDConsumer(USBHID& HID, uint8_t reportID=HID_CONSUMER_REPORT_ID) : HIDReporter(HID, (uint8_t*)&report, sizeof(report), reportID) {
         report.button = 0;
     }
 	void begin(void);
 	void end(void);
     void press(uint16_t button);
     void release();
-};
-
-//================================================================================
-//================================================================================
-//	Keyboard
-
-#define SHIFT 0x80
-const uint8_t _asciimap[128] =
-{
-	0x00,             // NUL
-	0x00,             // SOH
-	0x00,             // STX
-	0x00,             // ETX
-	0x00,             // EOT
-	0x00,             // ENQ
-	0x00,             // ACK
-	0x00,             // BEL
-	0x2a,             // BS	Backspace
-	0x2b,             // TAB	Tab
-	0x28,             // LF	Enter
-	0x00,             // VT
-	0x00,             // FF
-	0x00,             // CR
-	0x00,             // SO
-	0x00,             // SI
-	0x00,             // DEL
-	0x00,             // DC1
-	0x00,             // DC2
-	0x00,             // DC3
-	0x00,             // DC4
-	0x00,             // NAK
-	0x00,             // SYN
-	0x00,             // ETB
-	0x00,             // CAN
-	0x00,             // EM
-	0x00,             // SUB
-	0x00,             // ESC
-	0x00,             // FS
-	0x00,             // GS
-	0x00,             // RS
-	0x00,             // US
-
-	0x2c,		   //  ' '
-	0x1e|SHIFT,	   // !
-	0x34|SHIFT,	   // "
-	0x20|SHIFT,    // #
-	0x21|SHIFT,    // $
-	0x22|SHIFT,    // %
-	0x24|SHIFT,    // &
-	0x34,          // '
-	0x26|SHIFT,    // (
-	0x27|SHIFT,    // )
-	0x25|SHIFT,    // *
-	0x2e|SHIFT,    // +
-	0x36,          // ,
-	0x2d,          // -
-	0x37,          // .
-	0x38,          // /
-	0x27,          // 0
-	0x1e,          // 1
-	0x1f,          // 2
-	0x20,          // 3
-	0x21,          // 4
-	0x22,          // 5
-	0x23,          // 6
-	0x24,          // 7
-	0x25,          // 8
-	0x26,          // 9
-	0x33|SHIFT,      // :
-	0x33,          // ;
-	0x36|SHIFT,      // <
-	0x2e,          // =
-	0x37|SHIFT,      // >
-	0x38|SHIFT,      // ?
-	0x1f|SHIFT,      // @
-	0x04|SHIFT,      // A
-	0x05|SHIFT,      // B
-	0x06|SHIFT,      // C
-	0x07|SHIFT,      // D
-	0x08|SHIFT,      // E
-	0x09|SHIFT,      // F
-	0x0a|SHIFT,      // G
-	0x0b|SHIFT,      // H
-	0x0c|SHIFT,      // I
-	0x0d|SHIFT,      // J
-	0x0e|SHIFT,      // K
-	0x0f|SHIFT,      // L
-	0x10|SHIFT,      // M
-	0x11|SHIFT,      // N
-	0x12|SHIFT,      // O
-	0x13|SHIFT,      // P
-	0x14|SHIFT,      // Q
-	0x15|SHIFT,      // R
-	0x16|SHIFT,      // S
-	0x17|SHIFT,      // T
-	0x18|SHIFT,      // U
-	0x19|SHIFT,      // V
-	0x1a|SHIFT,      // W
-	0x1b|SHIFT,      // X
-	0x1c|SHIFT,      // Y
-	0x1d|SHIFT,      // Z
-	0x2f,          // [
-	0x31,          // bslash
-	0x30,          // ]
-	0x23|SHIFT,    // ^
-	0x2d|SHIFT,    // _
-	0x35,          // `
-	0x04,          // a
-	0x05,          // b
-	0x06,          // c
-	0x07,          // d
-	0x08,          // e
-	0x09,          // f
-	0x0a,          // g
-	0x0b,          // h
-	0x0c,          // i
-	0x0d,          // j
-	0x0e,          // k
-	0x0f,          // l
-	0x10,          // m
-	0x11,          // n
-	0x12,          // o
-	0x13,          // p
-	0x14,          // q
-	0x15,          // r
-	0x16,          // s
-	0x17,          // t
-	0x18,          // u
-	0x19,          // v
-	0x1a,          // w
-	0x1b,          // x
-	0x1c,          // y
-	0x1d,          // z
-	0x2f|SHIFT,    //
-	0x31|SHIFT,    // |
-	0x30|SHIFT,    // }
-	0x35|SHIFT,    // ~
-	0				// DEL
 };
 
 #define KEY_LEFT_CTRL		0x80
@@ -607,24 +468,31 @@ typedef struct{
     uint8_t reportID;
 	uint8_t modifiers;
 	uint8_t reserved;
-	uint8_t keys[6];
+	uint8_t keys[HID_KEYBOARD_ROLLOVER];
 } __packed KeyReport_t;
 
 class HIDKeyboard : public Print, public HIDReporter {
 public:
 	KeyReport_t keyReport;
+    
+protected:    
     uint8_t leds[HID_BUFFER_ALLOCATE_SIZE(1,1)];
     HIDBuffer_t ledData;
     uint8_t reportID;
+    uint8_t getKeyCode(uint8_t k, uint8_t* modifiersP);
+    bool adjustForHostCapsLock = true;
 
 public:
-	HIDKeyboard(uint8_t _reportID=HID_KEYBOARD_REPORT_ID) : 
-        HIDReporter((uint8*)&keyReport, sizeof(KeyReport_t), _reportID),
+	HIDKeyboard(USBHID& HID, uint8_t _reportID=HID_KEYBOARD_REPORT_ID) : 
+        HIDReporter(HID, (uint8*)&keyReport, sizeof(KeyReport_t), _reportID),
         ledData(leds, HID_BUFFER_SIZE(1,_reportID), _reportID, HID_BUFFER_MODE_NO_WAIT),
         reportID(_reportID)
         {}
 	void begin(void);
 	void end(void);
+    void setAdjustForHostCapsLock(bool state) {
+        adjustForHostCapsLock = state;
+    }
     inline uint8 getLEDs(void) {
         return leds[reportID != 0 ? 1 : 0];
     }
@@ -678,7 +546,8 @@ public:
 	void sliderRight(uint16_t val);
 	void slider(uint16_t val);
 	void hat(int16_t dir);
-	HIDJoystick(uint8_t reportID=HID_JOYSTICK_REPORT_ID) : HIDReporter((uint8_t*)&joyReport, sizeof(joyReport), reportID) {
+	HIDJoystick(USBHID& HID, uint8_t reportID=HID_JOYSTICK_REPORT_ID) 
+            : HIDReporter(HID, (uint8_t*)&joyReport, sizeof(joyReport), reportID) {
         joyReport.buttons = 0;
         joyReport.hat = 15;
         joyReport.x = 512;
@@ -690,20 +559,18 @@ public:
     }
 };
 
-extern USBHIDDevice USBHID;
-
 template<unsigned txSize,unsigned rxSize>class HIDRaw : public HIDReporter {
 private:
     uint8_t txBuffer[txSize];
     uint8_t rxBuffer[HID_BUFFER_ALLOCATE_SIZE(rxSize,0)];
     HIDBuffer_t buf;
 public:
-	HIDRaw() : HIDReporter(txBuffer, sizeof(txBuffer)) {}
+	HIDRaw(USBHID& HID) : HIDReporter(HID, txBuffer, sizeof(txBuffer)) {}
 	void begin(void) {
         buf.buffer = rxBuffer;
         buf.bufferSize = HID_BUFFER_SIZE(rxSize,0);
         buf.reportID = 0;
-        USBHID.addOutputBuffer(&buf);
+        HID.addOutputBuffer(&buf);
     }
 	void end(void);
 	void send(const uint8_t* data, unsigned n=sizeof(txBuffer)) {
@@ -712,46 +579,6 @@ public:
         sendReport();
     }
 };
-
-class USBCompositeSerial : public Stream {
-public:
-    USBCompositeSerial (void);
-
-    void begin(void);
-
-	// Roger Clark. Added dummy function so that existing Arduino sketches which specify baud rate will compile.
-	void begin(unsigned long);
-	void begin(unsigned long, uint8_t);
-    void end(void);
-
-	operator bool() { return true; } // Roger Clark. This is needed because in cardinfo.ino it does if (!Serial) . It seems to be a work around for the Leonardo that we needed to implement just to be compliant with the API
-
-    virtual int available(void);// Changed to virtual
-
-    uint32 read(uint8 * buf, uint32 len);
-   // uint8  read(void);
-
-	// Roger Clark. added functions to support Arduino 1.0 API
-    virtual int peek(void);
-    virtual int read(void);
-    int availableForWrite(void);
-    virtual void flush(void);	
-	
-    size_t write(uint8);
-    size_t write(const char *str);
-    size_t write(const uint8*, uint32);
-
-    uint8 getRTS();
-    uint8 getDTR();
-    uint8 isConnected();
-    uint8 pending();
-};
-
-extern HIDMouse Mouse;
-extern HIDKeyboard Keyboard;
-extern HIDJoystick Joystick;
-extern USBCompositeSerial CompositeSerial;
-extern HIDKeyboard BootKeyboard;
 
 extern const HIDReportDescriptor* hidReportMouse;
 extern const HIDReportDescriptor* hidReportKeyboard;
@@ -770,4 +597,4 @@ extern const HIDReportDescriptor* hidReportBootKeyboard;
 #define HID_BOOT_KEYBOARD           hidReportBootKeyboard
 
 #endif
-        
+        		
