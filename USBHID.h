@@ -21,6 +21,9 @@
 #include <boards.h>
 #include "Stream.h"
 #include "usb_hid.h"
+#include "KeyboardCodes.h"
+#include "ConsumerKeyCodes.h"
+#include "USBCompositeSerial.h"
 
 #define USB_HID_MAX_PRODUCT_LENGTH 32
 #define USB_HID_MAX_MANUFACTURER_LENGTH 32
@@ -100,6 +103,13 @@
     0x75, 0x08,						/*      REPORT_SIZE (8) */ \
     0x95, 0x03,						/*      REPORT_COUNT (3) */ \
     0x81, 0x06,						/*      INPUT (Data,Var,Rel) */ \
+	0x05, 0x0C,						/* Usage Page (Consumer)             */ \
+	0x0A, 0x38, 0x02,				/* Usage (AC Pan)                    */ \
+	0x15, 0x81,						/* Logical Minimum (-127)            */ \
+	0x25, 0x7F,						/* Logical Maximum (127)             */ \
+	0x75, 0x08,						/* Report Size (8)                   */ \
+	0x95, 0x01,						/* Report Count (1)                  */ \
+	0x81, 0x06,						/* Input (Data, Variable, Absolute)  */ \
     0xc0,      						/*    END_COLLECTION */ \
     MACRO_ARGUMENT_2_TO_END(__VA_ARGS__)  \
     0xc0      						/*  END_COLLECTION */ 
@@ -354,19 +364,21 @@ class HIDReporter {
 #define MOUSE_LEFT 1
 #define MOUSE_RIGHT 2
 #define MOUSE_MIDDLE 4
-#define MOUSE_ALL (MOUSE_LEFT | MOUSE_RIGHT | MOUSE_MIDDLE)
+#define MOUSE_BACK 8
+#define MOUSE_FORWARDS 16
+#define MOUSE_ALL (MOUSE_LEFT | MOUSE_RIGHT | MOUSE_MIDDLE | MOUSE_BACK | MOUSE_FORWARDS)
 
 class HIDMouse : public HIDReporter {
 protected:
     uint8_t _buttons;
 	void buttons(uint8_t b);
-    uint8_t reportBuffer[5];
+    uint8_t reportBuffer[6];
 public:
 	HIDMouse(USBHID& HID, uint8_t reportID=HID_MOUSE_REPORT_ID) : HIDReporter(HID, reportBuffer, sizeof(reportBuffer), reportID), _buttons(0) {}
 	void begin(void);
 	void end(void);
 	void click(uint8_t b = MOUSE_LEFT);
-	void move(signed char x, signed char y, signed char wheel = 0);
+	void move(signed char x, signed char y, signed char wheely = 0, signed char wheelx = 0);
 	void press(uint8_t b = MOUSE_LEFT);		// press LEFT by default
 	void release(uint8_t b = MOUSE_LEFT);	// release LEFT by default
 	bool isPressed(uint8_t b = MOUSE_ALL);	// check all buttons by default
@@ -425,6 +437,7 @@ public:
 	void end(void);
     void press(uint16_t button);
     void release();
+	void write(uint16_t button);
 };
 
 #define KEY_LEFT_CTRL		0x80
@@ -471,6 +484,12 @@ typedef struct{
 	uint8_t keys[HID_KEYBOARD_ROLLOVER];
 } __packed KeyReport_t;
 
+
+enum KeyboardMode {
+	ASCII_TO_HID,
+	RAW_HID
+};
+
 class HIDKeyboard : public Print, public HIDReporter {
 public:
 	KeyReport_t keyReport;
@@ -481,6 +500,7 @@ protected:
     uint8_t reportID;
     uint8_t getKeyCode(uint8_t k, uint8_t* modifiersP);
     bool adjustForHostCapsLock = true;
+	KeyboardMode mode;
 
 public:
 	HIDKeyboard(USBHID& HID, uint8_t _reportID=HID_KEYBOARD_REPORT_ID) : 
@@ -500,6 +520,7 @@ public:
 	virtual size_t press(uint8_t k);
 	virtual size_t release(uint8_t k);
 	virtual void releaseAll(void);
+	void setKeyboardMode(KeyboardMode newmode);
 };
 
 

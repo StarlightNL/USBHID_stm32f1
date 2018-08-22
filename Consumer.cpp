@@ -11,3 +11,9 @@ void HIDConsumer::release() {
     report.button = 0;
     sendReport();
 }
+
+void HIDConsumer::write(uint16_t button)
+{
+	press(button);
+	release();
+}
